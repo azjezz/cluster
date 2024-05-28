@@ -70,7 +70,13 @@ final class ContextClusterWorker extends AbstractLogger implements ClusterWorker
         $this->context->send(new WatcherMessage(WatcherMessageType::Data, $data));
     }
 
-    public function run(): void
+    /**
+     * Run the worker.
+     *
+     * @param null|int|float $shutdownTimeout The maximum time to wait for the worker to shut down, in seconds,
+     *    or null to wait indefinitely.
+     */
+    public function run(null|int|float $shutdownTimeout = ClusterWatcher::WORKER_TIMEOUT): void
     {
         $watcher = EventLoop::repeat(self::PING_TIMEOUT / 2, weakClosure(function (): void {
             if ($this->lastActivity < \time() - self::PING_TIMEOUT) {
@@ -109,7 +115,11 @@ final class ContextClusterWorker extends AbstractLogger implements ClusterWorker
                 };
             }
 
-            $this->joinFuture->await(new TimeoutCancellation(ClusterWatcher::WORKER_TIMEOUT));
+            if ($shutdownTimeout === null) {
+                $this->joinFuture->await();
+            } else {
+                $this->joinFuture->await(new TimeoutCancellation($shutdownTimeout));
+            }
         } catch (\Throwable $exception) {
             $this->joinFuture->ignore();
             throw $exception;
